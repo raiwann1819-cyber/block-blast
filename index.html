@@ -3,46 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Block Blast High Score Edition</title>
+    <title>Block Blast - High Score Fix</title>
     <style>
-        :root { --bg: #121212; --grid: #1e1e1e; --accent: #00adb5; --cell-size: 40px; }
+        :root { --bg: #0f0f0f; --grid: #1a1a1a; --accent: #00adb5; --cell-size: 40px; }
+        * { box-sizing: border-box; }
         body { background: var(--bg); color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; touch-action: none; }
         
-        #header { padding: 15px; background: rgba(0,0,0,0.3); margin-bottom: 10px; }
-        #score-container { font-size: 24px; color: #fff; font-weight: bold; }
-        #high-score-container { font-size: 16px; color: var(--accent); margin-top: 5px; }
+        /* 全体を中央に固定するコンテナ */
+        #game-container {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            width: 100vw; height: 100vh; max-width: 500px; margin: 0 auto;
+        }
+
+        #header { width: 100%; padding: 10px; }
+        #score-container { font-size: 28px; color: #fff; font-weight: bold; }
+        #high-score-container { font-size: 14px; color: var(--accent); margin-top: 4px; }
         
         #grid { 
             display: grid; grid-template-columns: repeat(8, var(--cell-size)); grid-template-rows: repeat(8, var(--cell-size)); gap: 4px; 
-            background: var(--grid); padding: 10px; border-radius: 8px; width: fit-content; margin: 0 auto; 
+            background: var(--grid); padding: 8px; border-radius: 8px; width: fit-content;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
         }
-        .cell { width: var(--cell-size); height: var(--cell-size); background: #2a2a2a; border-radius: 4px; }
+        .cell { width: var(--cell-size); height: var(--cell-size); background: #262626; border-radius: 4px; }
         .cell.filled { background: #e94560; }
 
-        #pieces-area { display: flex; justify-content: center; gap: 30px; margin-top: 40px; min-height: 120px; }
-        .piece-container { display: inline-block; position: relative; cursor: grab; touch-action: none; }
+        #pieces-area { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 30px; height: 100px; width: 100%; }
+        
+        /* ブロックが崩れないように固定 */
+        .piece-container { display: inline-block; position: relative; cursor: grab; touch-action: none; white-space: nowrap; }
         .p-row { display: flex; height: 22px; }
-        .p-cell { width: 20px; height: 20px; border-radius: 3px; margin: 1px; }
+        .p-cell { width: 20px; height: 20px; border-radius: 3px; margin: 1px; flex-shrink: 0; }
         .empty { background: transparent !important; }
 
         #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
-        button { background: var(--accent); border: none; padding: 15px 30px; color: white; border-radius: 8px; font-size: 20px; cursor: pointer; }
+        button { background: var(--accent); border: none; padding: 15px 40px; color: white; border-radius: 8px; font-size: 20px; cursor: pointer; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <div id="header">
-        <div id="score-container">SCORE: <span id="score">0</span></div>
-        <div id="high-score-container">HIGH SCORE: <span id="high-score">0</span></div>
+
+    <div id="game-container">
+        <div id="header">
+            <div id="score-container">SCORE: <span id="score">0</span></div>
+            <div id="high-score-container">HIGH SCORE: <span id="high-score">0</span></div>
+        </div>
+
+        <div id="grid"></div>
+        <div id="pieces-area"></div>
     </div>
 
-    <div id="grid"></div>
-    <div id="pieces-area"></div>
-
     <div id="overlay">
-        <h2 style="font-size: 40px; color: #ff2e63;">GAME OVER</h2>
-        <p id="final-score" style="font-size: 22px;"></p>
-        <p id="new-record" style="color: #ffde7d; font-weight: bold; display: none;">NEW RECORD!</p>
-        <button onclick="location.reload()">RETRY</button>
+        <h2 style="font-size: 48px; color: #ff2e63; margin-bottom: 0;">GAME OVER</h2>
+        <p id="final-score" style="font-size: 24px; margin-top: 10px;"></p>
+        <p id="new-record" style="color: #ffde7d; font-weight: bold; display: none;">🏆 NEW RECORD!</p>
+        <button onclick="location.reload()">TRY AGAIN</button>
     </div>
 
 <script>
@@ -63,10 +76,10 @@ const SHAPES = [
 ];
 
 function init() {
-    // ハイスコアの読み込み
-    const savedHighScore = localStorage.getItem('blockBlastHighScore');
-    if (savedHighScore) {
-        highScore = parseInt(savedHighScore);
+    // ハイスコア読み込み
+    const saved = localStorage.getItem('blockBlastHighScore');
+    if (saved) {
+        highScore = parseInt(saved);
         document.getElementById('high-score').innerText = highScore;
     }
 
@@ -111,12 +124,12 @@ function createPieceElement(shape) {
         p.appendChild(rowEl);
     });
 
-    const handleStart = (e) => {
+    const start = (e) => {
         const t = e.touches ? e.touches[0] : e;
         startDrag(t, p, shape);
     };
-    p.addEventListener('mousedown', handleStart);
-    p.addEventListener('touchstart', (e) => { e.preventDefault(); handleStart(e); }, {passive: false});
+    p.addEventListener('mousedown', start);
+    p.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); }, {passive: false});
     return p;
 }
 
@@ -126,15 +139,15 @@ function startDrag(e, el, shape) {
     el.style.pointerEvents = "none";
     el.style.transform = "scale(1.8)";
 
-    const moveAt = (x, y) => {
+    const move = (x, y) => {
         el.style.left = x - el.offsetWidth / 2 + 'px';
         el.style.top = y - el.offsetHeight - 60 + 'px';
     };
-    moveAt(e.clientX, e.clientY);
+    move(e.clientX, e.clientY);
 
     const onMove = (me) => {
         const t = me.touches ? me.touches[0] : me;
-        moveAt(t.clientX, t.clientY);
+        move(t.clientX, t.clientY);
     };
 
     const onEnd = (ee) => {
@@ -145,11 +158,12 @@ function startDrag(e, el, shape) {
         document.removeEventListener('touchend', onEnd);
         
         const gridRect = document.getElementById('grid').getBoundingClientRect();
-        const dropX = t.clientX - gridRect.left - 10;
-        const dropY = (t.clientY - 60) - gridRect.top - 10;
+        // 判定位置の計算精度をアップ
+        const dropX = t.clientX - gridRect.left - 8;
+        const dropY = (t.clientY - 60) - gridRect.top - 8;
 
-        const c = Math.floor(dropX / (CELL_SIZE + GAP));
-        const r = Math.floor(dropY / (CELL_SIZE + GAP));
+        const c = Math.round(dropX / (CELL_SIZE + 4));
+        const r = Math.round(dropY / (CELL_SIZE + 4));
 
         if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE && canPlace(shape.cells, r, c)) {
             place(shape, r, c);
@@ -220,11 +234,10 @@ function clearCell(r, c) {
 
 function updateScore() {
     document.getElementById('score').innerText = score;
-    // ハイスコア更新チェック
     if (score > highScore) {
         highScore = score;
         document.getElementById('high-score').innerText = highScore;
-        localStorage.setItem('blockBlastHighScore', highScore); // 保存
+        localStorage.setItem('blockBlastHighScore', highScore);
     }
 }
 
@@ -245,7 +258,7 @@ function checkGameOver() {
 
 function showGameOver() {
     document.getElementById('overlay').style.display = 'flex';
-    document.getElementById('final-score').innerText = `SCORE: ${score}`;
+    document.getElementById('final-score').innerText = `FINAL SCORE: ${score}`;
     if (score >= highScore && score > 0) {
         document.getElementById('new-record').style.display = 'block';
     }

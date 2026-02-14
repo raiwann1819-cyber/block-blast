@@ -3,66 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Block Blast Ultimate</title>
+    <title>Block Blast High Score Edition</title>
     <style>
-        :root { --bg: #121212; --grid: #1e1e1e; --accent: #00adb5; }
-        body { background: var(--bg); color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 10px; overflow: hidden; touch-action: none; }
+        :root { --bg: #121212; --grid: #1e1e1e; --accent: #00adb5; --cell-size: 40px; }
+        body { background: var(--bg); color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; touch-action: none; }
         
-        #score-container { font-size: 24px; margin: 15px 0; color: var(--accent); font-weight: bold; }
+        #header { padding: 15px; background: rgba(0,0,0,0.3); margin-bottom: 10px; }
+        #score-container { font-size: 24px; color: #fff; font-weight: bold; }
+        #high-score-container { font-size: 16px; color: var(--accent); margin-top: 5px; }
         
-        /* 盤面：サイズを固定して計算を安定させる */
         #grid { 
-            display: grid; grid-template-columns: repeat(8, 40px); grid-template-rows: repeat(8, 40px); gap: 4px; 
-            background: var(--grid); padding: 10px; border-radius: 8px;
-            width: fit-content; margin: 0 auto; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            display: grid; grid-template-columns: repeat(8, var(--cell-size)); grid-template-rows: repeat(8, var(--cell-size)); gap: 4px; 
+            background: var(--grid); padding: 10px; border-radius: 8px; width: fit-content; margin: 0 auto; 
         }
-        .cell { width: 40px; height: 40px; background: #2a2a2a; border-radius: 4px; }
-        .cell.filled { background: #e94560; border: 1px solid rgba(255,255,255,0.1); }
+        .cell { width: var(--cell-size); height: var(--cell-size); background: #2a2a2a; border-radius: 4px; }
+        .cell.filled { background: #e94560; }
 
-        /* 持ち駒エリア：ここが崩れないように固定 */
-        #pieces-area { 
-            display: flex; justify-content: center; align-items: center; gap: 20px;
-            margin-top: 40px; min-height: 120px; width: 100%; 
-        }
-        
-        .piece-container { 
-            display: grid; gap: 2px; cursor: grab; touch-action: none; user-select: none;
-        }
-        .p-cell { width: 20px; height: 20px; border-radius: 3px; }
+        #pieces-area { display: flex; justify-content: center; gap: 30px; margin-top: 40px; min-height: 120px; }
+        .piece-container { display: inline-block; position: relative; cursor: grab; touch-action: none; }
+        .p-row { display: flex; height: 22px; }
+        .p-cell { width: 20px; height: 20px; border-radius: 3px; margin: 1px; }
         .empty { background: transparent !important; }
 
-        #overlay { 
-            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); 
-            flex-direction: column; justify-content: center; align-items: center; z-index: 9999; 
-        }
+        #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
         button { background: var(--accent); border: none; padding: 15px 30px; color: white; border-radius: 8px; font-size: 20px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div id="score-container">SCORE: <span id="score">0</span></div>
+    <div id="header">
+        <div id="score-container">SCORE: <span id="score">0</span></div>
+        <div id="high-score-container">HIGH SCORE: <span id="high-score">0</span></div>
+    </div>
+
     <div id="grid"></div>
     <div id="pieces-area"></div>
+
     <div id="overlay">
-        <h2>GAME OVER</h2>
-        <p id="final-score" style="font-size: 20px;"></p>
-        <button onclick="location.reload()">もう一度遊ぶ</button>
+        <h2 style="font-size: 40px; color: #ff2e63;">GAME OVER</h2>
+        <p id="final-score" style="font-size: 22px;"></p>
+        <p id="new-record" style="color: #ffde7d; font-weight: bold; display: none;">NEW RECORD!</p>
+        <button onclick="location.reload()">RETRY</button>
     </div>
 
 <script>
 const GRID_SIZE = 8;
+const CELL_SIZE = 40;
+const GAP = 4;
 let gridData = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(null));
 let score = 0;
+let highScore = 0;
 
 const SHAPES = [
-    { color: '#FF2E63', cells: [[1, 1], [1, 1]] }, // 四角
-    { color: '#08D9D6', cells: [[1, 1, 1, 1]] },    // 長棒
-    { color: '#FFD460', cells: [[1, 1, 1], [0, 1, 0]] }, // T字
-    { color: '#AA96DA', cells: [[1, 1], [1, 0]] },    // L字
-    { color: '#61C0BF', cells: [[1]] },               // 点
-    { color: '#F08A5D', cells: [[1, 1, 0], [0, 1, 1]] } // Z字
+    { color: '#FF2E63', cells: [[1, 1], [1, 1]] },
+    { color: '#08D9D6', cells: [[1, 1, 1, 1]] },
+    { color: '#FFD460', cells: [[1, 1, 1], [0, 1, 0]] },
+    { color: '#AA96DA', cells: [[1, 1], [1, 0]] },
+    { color: '#61C0BF', cells: [[1]] },
+    { color: '#F08A5D', cells: [[1, 1, 0], [0, 1, 1]] }
 ];
 
 function init() {
+    // ハイスコアの読み込み
+    const savedHighScore = localStorage.getItem('blockBlastHighScore');
+    if (savedHighScore) {
+        highScore = parseInt(savedHighScore);
+        document.getElementById('high-score').innerText = highScore;
+    }
+
     const gridEl = document.getElementById('grid');
     gridEl.innerHTML = '';
     for (let r = 0; r < GRID_SIZE; r++) {
@@ -84,21 +91,25 @@ function spawnPieces() {
         const piece = createPieceElement(shape);
         area.appendChild(piece);
     }
-    checkGameOver();
+    if (!checkGameOver()) showGameOver();
 }
 
 function createPieceElement(shape) {
     const p = document.createElement('div');
     p.className = 'piece-container';
     p.dataset.shape = JSON.stringify(shape);
-    p.style.gridTemplateColumns = `repeat(${shape.cells[0].length}, 20px)`;
     
-    shape.cells.forEach(row => row.forEach(v => {
-        const c = document.createElement('div');
-        c.className = 'p-cell' + (v ? '' : ' empty');
-        if(v) c.style.backgroundColor = shape.color;
-        p.appendChild(c);
-    }));
+    shape.cells.forEach(row => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'p-row';
+        row.forEach(v => {
+            const c = document.createElement('div');
+            c.className = 'p-cell' + (v ? '' : ' empty');
+            if(v) c.style.backgroundColor = shape.color;
+            rowEl.appendChild(c);
+        });
+        p.appendChild(rowEl);
+    });
 
     const handleStart = (e) => {
         const t = e.touches ? e.touches[0] : e;
@@ -113,11 +124,11 @@ function startDrag(e, el, shape) {
     el.style.position = "fixed";
     el.style.zIndex = "1000";
     el.style.pointerEvents = "none";
-    el.style.transform = "scale(1.5)"; // ドラッグ中だけ大きくして見やすく
+    el.style.transform = "scale(1.8)";
 
     const moveAt = (x, y) => {
         el.style.left = x - el.offsetWidth / 2 + 'px';
-        el.style.top = y - el.offsetHeight - 50 + 'px';
+        el.style.top = y - el.offsetHeight - 60 + 'px';
     };
     moveAt(e.clientX, e.clientY);
 
@@ -133,26 +144,24 @@ function startDrag(e, el, shape) {
         document.removeEventListener('touchmove', onMove);
         document.removeEventListener('touchend', onEnd);
         
-        el.style.display = 'none';
-        const target = document.elementFromPoint(t.clientX, t.clientY);
-        el.style.display = 'grid';
+        const gridRect = document.getElementById('grid').getBoundingClientRect();
+        const dropX = t.clientX - gridRect.left - 10;
+        const dropY = (t.clientY - 60) - gridRect.top - 10;
 
-        if (target && target.id && target.id.startsWith('c-')) {
-            const [_, r, c] = target.id.split('-').map(Number);
-            if (canPlace(shape.cells, r, c)) {
-                place(shape, r, c);
-                el.remove();
-                checkLines();
-                if (document.getElementById('pieces-area').children.length === 0) spawnPieces();
-                else checkGameOver();
-                return;
-            }
+        const c = Math.floor(dropX / (CELL_SIZE + GAP));
+        const r = Math.floor(dropY / (CELL_SIZE + GAP));
+
+        if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE && canPlace(shape.cells, r, c)) {
+            place(shape, r, c);
+            el.remove();
+            checkLines();
+            if (document.getElementById('pieces-area').children.length === 0) spawnPieces();
+            else if (!checkGameOver()) showGameOver();
+        } else {
+            el.style.position = "static";
+            el.style.pointerEvents = "auto";
+            el.style.transform = "scale(1)";
         }
-        // 失敗時
-        el.style.position = "static";
-        el.style.pointerEvents = "auto";
-        el.style.transform = "scale(1)";
-        el.style.zIndex = "auto";
     };
 
     document.addEventListener('mousemove', onMove);
@@ -182,6 +191,8 @@ function place(shape, r, c) {
             cell.style.backgroundColor = shape.color;
         }
     }));
+    score += 10;
+    updateScore();
 }
 
 function checkLines() {
@@ -196,7 +207,7 @@ function checkLines() {
     cs.forEach(c => { for(let r=0; r<GRID_SIZE; r++) clearCell(r,c); });
     if(rs.length > 0 || cs.length > 0) {
         score += (rs.length + cs.length) * 100;
-        document.getElementById('score').innerText = score;
+        updateScore();
     }
 }
 
@@ -207,20 +218,36 @@ function clearCell(r, c) {
     el.style.backgroundColor = '';
 }
 
+function updateScore() {
+    document.getElementById('score').innerText = score;
+    // ハイスコア更新チェック
+    if (score > highScore) {
+        highScore = score;
+        document.getElementById('high-score').innerText = highScore;
+        localStorage.setItem('blockBlastHighScore', highScore); // 保存
+    }
+}
+
 function checkGameOver() {
     const pieces = document.querySelectorAll('.piece-container');
-    let canMove = false;
+    if (pieces.length === 0) return true;
+    let possible = false;
     pieces.forEach(p => {
         const shape = JSON.parse(p.dataset.shape);
         for(let r=0; r<GRID_SIZE; r++) {
             for(let c=0; c<GRID_SIZE; c++) {
-                if(canPlace(shape.cells, r, c)) canMove = true;
+                if(canPlace(shape.cells, r, c)) possible = true;
             }
         }
     });
-    if (!canMove && pieces.length > 0) {
-        document.getElementById('overlay').style.display = 'flex';
-        document.getElementById('final-score').innerText = `SCORE: ${score}`;
+    return possible;
+}
+
+function showGameOver() {
+    document.getElementById('overlay').style.display = 'flex';
+    document.getElementById('final-score').innerText = `SCORE: ${score}`;
+    if (score >= highScore && score > 0) {
+        document.getElementById('new-record').style.display = 'block';
     }
 }
 

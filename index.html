@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Block Blast</title>
+    <title>Block Blast Clone</title>
     <style>
         :root {
             --bg-color: #121212;
@@ -11,11 +11,10 @@
             --cell-empty: #2a2a2a;
             --accent: #00adb5;
         }
-        body { background: var(--bg-color); color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; overflow: hidden; }
+        body { background: var(--bg-color); color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; }
         #score-container { font-size: 28px; margin-bottom: 20px; font-weight: bold; color: var(--accent); }
         #game-layout { display: flex; flex-direction: column; align-items: center; gap: 30px; }
         
-        /* 盤面の設定 */
         #grid { 
             display: grid; 
             grid-template-columns: repeat(8, 45px); 
@@ -24,26 +23,18 @@
             background: var(--grid-bg); 
             padding: 10px; 
             border-radius: 10px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        .cell { width: 45px; height: 45px; background: var(--cell-empty); border-radius: 4px; transition: 0.2s; }
-        .cell.filled { box-shadow: inset 0 0 10px rgba(0,0,0,0.3); }
+        .cell { width: 45px; height: 45px; background: var(--cell-empty); border-radius: 4px; }
+        .cell.filled { background: #e94560; } /* 置かれた時の色 */
 
-        /* 手持ちブロックの設定 */
-        #pieces-area { display: flex; gap: 20px; min-height: 120px; align-items: center; justify-content: center; }
-        .piece-container { cursor: grab; display: grid; gap: 2px; transition: transform 0.1s; }
-        .piece-container:active { transform: scale(1.1); cursor: grabbing; }
+        #pieces-area { display: flex; gap: 20px; min-height: 120px; align-items: center; justify-content: center; margin-top: 20px; }
+        .piece-container { cursor: grab; display: grid; gap: 2px; }
         .p-cell { width: 25px; height: 25px; border-radius: 3px; }
         .empty { background: transparent !important; }
 
-        /* オーバーレイ（ゲームオーバー用） */
         #overlay { 
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.85); flex-direction: column; justify-content: center; align-items: center; z-index: 100; 
-        }
-        button { 
-            background: var(--accent); border: none; padding: 12px 24px; color: white; 
-            font-size: 18px; border-radius: 5px; cursor: pointer; margin-top: 20px;
+            background: rgba(0,0,0,0.85); flex-direction: column; justify-content: center; align-items: center; 
         }
     </style>
 </head>
@@ -58,11 +49,135 @@
 
     <div id="overlay">
         <h2 style="font-size: 40px; color: #ff2e63;">GAME OVER</h2>
-        <p id="final-score" style="font-size: 20px;"></p>
-        <button onclick="location.reload()">再挑戦する</button>
+        <button onclick="location.reload()">再挑戦</button>
     </div>
 
 <script>
+// --- 設定とデータ ---
 const GRID_SIZE = 8;
 let grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(null));
 let score = 0;
+
+const SHAPES = [
+    { color: '#FF2E63', cells: [[1, 1], [1, 1]] },
+    { color: '#08D9D6', cells: [[1, 1, 1, 1]] },
+    { color: '#FFD460', cells: [[1, 1, 1], [0, 1, 0]] },
+    { color: '#AA96DA', cells: [[1, 1], [1, 0]] },
+    { color: '#61C0BF', cells: [[1]] }
+];
+
+// --- メイン処理 ---
+function init() {
+    console.log("Game Initializing..."); // 動作確認用
+    const gridEl = document.getElementById('grid');
+    gridEl.innerHTML = '';
+    
+    // 盤面の作成
+    for (let r = 0; r < GRID_SIZE; r++) {
+        for (let c = 0; c < GRID_SIZE; c++) {
+            const cell = document.createElement('div');
+            cell.classList.add('cell');
+            cell.id = `c-${r}-${c}`;
+            cell.ondragover = (e) => e.preventDefault();
+            cell.ondrop = (e) => handleDrop(e, r, c);
+            gridEl.appendChild(cell);
+        }
+    }
+    spawnPieces();
+}
+
+function spawnPieces() {
+    const area = document.getElementById('pieces-area');
+    area.innerHTML = '';
+    for (let i = 0; i < 3; i++) {
+        const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+        const piece = document.createElement('div');
+        piece.className = 'piece-container';
+        piece.draggable = true;
+        piece.dataset.cells = JSON.stringify(shape.cells);
+        piece.style.gridTemplateColumns = `repeat(${shape.cells[0].length}, 25px)`;
+        
+        shape.cells.forEach(row => {
+            row.forEach(val => {
+                const c = document.createElement('div');
+                c.className = 'p-cell' + (val ? '' : ' empty');
+                if(val) c.style.backgroundColor = shape.color;
+                piece.appendChild(c);
+            });
+        });
+
+        piece.ondragstart = (e) => {
+            e.dataTransfer.setData('data', JSON.stringify(shape));
+            piece.id = 'dragging-now';
+        };
+        area.appendChild(piece);
+    }
+}
+
+function handleDrop(e, r, c) {
+    e.preventDefault();
+    const shape = JSON.parse(e.dataTransfer.getData('data'));
+    const dragEl = document.getElementById('dragging-now');
+
+    if (canPlace(shape.cells, r, c)) {
+        place(shape, r, c);
+        if(dragEl) dragEl.remove();
+        checkLines();
+        if (document.getElementById('pieces-area').children.length === 0) spawnPieces();
+    }
+    if(dragEl) dragEl.id = '';
+}
+
+function canPlace(cells, r, c) {
+    for (let i = 0; i < cells.length; i++) {
+        for (let j = 0; j < cells[i].length; j++) {
+            if (cells[i][j]) {
+                const nr = r + i, nc = c + j;
+                if (nr >= GRID_SIZE || nc >= GRID_SIZE || grid[nr][nc]) return false;
+            }
+        }
+    }
+    return true;
+}
+
+function place(shape, r, c) {
+    shape.cells.forEach((row, i) => {
+        row.forEach((val, j) => {
+            if (val) {
+                grid[r+i][c+j] = shape.color;
+                const el = document.getElementById(`c-${r+i}-${c+j}`);
+                el.classList.add('filled');
+                el.style.backgroundColor = shape.color;
+            }
+        });
+    });
+}
+
+function checkLines() {
+    let rToClear = [], cToClear = [];
+    for(let i=0; i<GRID_SIZE; i++) {
+        if (grid[i].every(x => x !== null)) rToClear.push(i);
+        if (grid.map(row => row[i]).every(x => x !== null)) cToClear.push(i);
+    }
+
+    rToClear.forEach(r => { for(let c=0; c<GRID_SIZE; c++) clearCell(r, c); });
+    cToClear.forEach(c => { for(let r=0; r<GRID_SIZE; r++) clearCell(r, c); });
+    
+    if(rToClear.length > 0 || cToClear.length > 0) {
+        score += (rToClear.length + cToClear.length) * 100;
+        document.getElementById('score').innerText = score;
+    }
+}
+
+function clearCell(r, c) {
+    grid[r][c] = null;
+    const el = document.getElementById(`c-${r}-${c}`);
+    el.classList.remove('filled');
+    el.style.backgroundColor = '';
+}
+
+// ページが読み込まれたら開始
+window.onload = init;
+</script>
+</body>
+</html>

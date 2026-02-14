@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Block Blast Clone</title>
+    <title>Perfect Block Blast Clone</title>
     <style>
         :root {
             --bg-color: #121212;
@@ -11,7 +11,7 @@
             --cell-empty: #2a2a2a;
             --accent: #00adb5;
         }
-        body { background: var(--bg-color); color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; }
+        body { background: var(--bg-color); color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; overflow: hidden; touch-action: none; }
         #score-container { font-size: 28px; margin-bottom: 20px; font-weight: bold; color: var(--accent); }
         #game-layout { display: flex; flex-direction: column; align-items: center; gap: 30px; }
         
@@ -23,18 +23,26 @@
             background: var(--grid-bg); 
             padding: 10px; 
             border-radius: 10px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        .cell { width: 45px; height: 45px; background: var(--cell-empty); border-radius: 4px; }
-        .cell.filled { background: #e94560; } /* 置かれた時の色 */
+        .cell { width: 45px; height: 45px; background: var(--cell-empty); border-radius: 4px; transition: 0.2s; }
+        .cell.filled { box-shadow: inset 0 0 10px rgba(0,0,0,0.3); }
 
         #pieces-area { display: flex; gap: 20px; min-height: 120px; align-items: center; justify-content: center; margin-top: 20px; }
         .piece-container { cursor: grab; display: grid; gap: 2px; }
+        .piece-container:active { cursor: grabbing; }
         .p-cell { width: 25px; height: 25px; border-radius: 3px; }
         .empty { background: transparent !important; }
 
+        /* ゲームオーバー画面 */
         #overlay { 
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.85); flex-direction: column; justify-content: center; align-items: center; 
+            background: rgba(0,0,0,0.9); flex-direction: column; justify-content: center; 
+            align-items: center; z-index: 100; 
+        }
+        button { 
+            background: var(--accent); border: none; padding: 15px 30px; color: white; 
+            font-size: 20px; border-radius: 8px; cursor: pointer; margin-top: 20px;
         }
     </style>
 </head>
@@ -48,31 +56,28 @@
     </div>
 
     <div id="overlay">
-        <h2 style="font-size: 40px; color: #ff2e63;">GAME OVER</h2>
-        <button onclick="location.reload()">再挑戦</button>
+        <h2 style="font-size: 50px; color: #ff2e63; margin-bottom: 10px;">GAME OVER</h2>
+        <p id="final-score" style="font-size: 24px;"></p>
+        <button onclick="location.reload()">もう一度挑戦する</button>
     </div>
 
 <script>
-// --- 設定とデータ ---
 const GRID_SIZE = 8;
 let grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(null));
 let score = 0;
 
 const SHAPES = [
-    { color: '#FF2E63', cells: [[1, 1], [1, 1]] },
-    { color: '#08D9D6', cells: [[1, 1, 1, 1]] },
-    { color: '#FFD460', cells: [[1, 1, 1], [0, 1, 0]] },
-    { color: '#AA96DA', cells: [[1, 1], [1, 0]] },
-    { color: '#61C0BF', cells: [[1]] }
+    { color: '#FF2E63', cells: [[1, 1], [1, 1]] },       // 正方形
+    { color: '#08D9D6', cells: [[1, 1, 1, 1]] },       // 棒(4)
+    { color: '#FFD460', cells: [[1, 1, 1], [0, 1, 0]] }, // T字
+    { color: '#AA96DA', cells: [[1, 1], [1, 0]] },       // L字
+    { color: '#61C0BF', cells: [[1]] },                  // 点
+    { color: '#F08A5D', cells: [[1, 1, 1]] }             // 棒(3)
 ];
 
-// --- メイン処理 ---
 function init() {
-    console.log("Game Initializing..."); // 動作確認用
     const gridEl = document.getElementById('grid');
     gridEl.innerHTML = '';
-    
-    // 盤面の作成
     for (let r = 0; r < GRID_SIZE; r++) {
         for (let c = 0; c < GRID_SIZE; c++) {
             const cell = document.createElement('div');
@@ -91,39 +96,54 @@ function spawnPieces() {
     area.innerHTML = '';
     for (let i = 0; i < 3; i++) {
         const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
-        const piece = document.createElement('div');
-        piece.className = 'piece-container';
-        piece.draggable = true;
-        piece.dataset.cells = JSON.stringify(shape.cells);
-        piece.style.gridTemplateColumns = `repeat(${shape.cells[0].length}, 25px)`;
-        
-        shape.cells.forEach(row => {
-            row.forEach(val => {
-                const c = document.createElement('div');
-                c.className = 'p-cell' + (val ? '' : ' empty');
-                if(val) c.style.backgroundColor = shape.color;
-                piece.appendChild(c);
-            });
-        });
-
-        piece.ondragstart = (e) => {
-            e.dataTransfer.setData('data', JSON.stringify(shape));
-            piece.id = 'dragging-now';
-        };
+        const piece = createPiece(shape);
         area.appendChild(piece);
     }
+    checkGameOver(); // 新しく出した時に詰んでないかチェック
+}
+
+function createPiece(shape) {
+    const piece = document.createElement('div');
+    piece.className = 'piece-container';
+    piece.draggable = true;
+    // データを属性として保存しておく
+    piece.setAttribute('data-shape', JSON.stringify(shape));
+    piece.style.gridTemplateColumns = `repeat(${shape.cells[0].length}, 25px)`;
+    
+    shape.cells.forEach(row => {
+        row.forEach(val => {
+            const c = document.createElement('div');
+            c.className = 'p-cell' + (val ? '' : ' empty');
+            if(val) c.style.backgroundColor = shape.color;
+            piece.appendChild(c);
+        });
+    });
+
+    piece.ondragstart = (e) => {
+        e.dataTransfer.setData('text/plain', piece.getAttribute('data-shape'));
+        piece.id = 'dragging-now';
+    };
+    return piece;
 }
 
 function handleDrop(e, r, c) {
     e.preventDefault();
-    const shape = JSON.parse(e.dataTransfer.getData('data'));
+    const data = e.dataTransfer.getData('text/plain');
+    if(!data) return;
+    const shape = JSON.parse(data);
     const dragEl = document.getElementById('dragging-now');
 
     if (canPlace(shape.cells, r, c)) {
         place(shape, r, c);
         if(dragEl) dragEl.remove();
         checkLines();
-        if (document.getElementById('pieces-area').children.length === 0) spawnPieces();
+        
+        // 3つ使い切ったら補充
+        if (document.getElementById('pieces-area').children.length === 0) {
+            spawnPieces();
+        } else {
+            checkGameOver(); // 残りのピースが置けるかチェック
+        }
     }
     if(dragEl) dragEl.id = '';
 }
@@ -157,13 +177,14 @@ function checkLines() {
     let rToClear = [], cToClear = [];
     for(let i=0; i<GRID_SIZE; i++) {
         if (grid[i].every(x => x !== null)) rToClear.push(i);
-        if (grid.map(row => row[i]).every(x => x !== null)) cToClear.push(i);
+        let colFull = true;
+        for(let j=0; j<GRID_SIZE; j++) if(grid[j][i] === null) colFull = false;
+        if (colFull) cToClear.push(i);
     }
 
-    rToClear.forEach(r => { for(let c=0; c<GRID_SIZE; c++) clearCell(r, c); });
-    cToClear.forEach(c => { for(let r=0; r<GRID_SIZE; r++) clearCell(r, c); });
-    
     if(rToClear.length > 0 || cToClear.length > 0) {
+        rToClear.forEach(r => { for(let c=0; c<GRID_SIZE; c++) clearCell(r, c); });
+        cToClear.forEach(c => { for(let r=0; r<GRID_SIZE; r++) clearCell(r, c); });
         score += (rToClear.length + cToClear.length) * 100;
         document.getElementById('score').innerText = score;
     }
@@ -176,7 +197,31 @@ function clearCell(r, c) {
     el.style.backgroundColor = '';
 }
 
-// ページが読み込まれたら開始
+// ここが重要：詰みの判定ロジック
+function checkGameOver() {
+    const pieces = document.querySelectorAll('.piece-container');
+    let anyPieceCanBePlaced = false;
+
+    pieces.forEach(p => {
+        const shape = JSON.parse(p.getAttribute('data-shape'));
+        // 盤面の全マスに対して、このピースが置けるか試す
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                if (canPlace(shape.cells, r, c)) {
+                    anyPieceCanBePlaced = true;
+                }
+            }
+        }
+    });
+
+    if (!anyPieceCanBePlaced && pieces.length > 0) {
+        const overlay = document.getElementById('overlay');
+        const finalScore = document.getElementById('final-score');
+        finalScore.innerText = `最終スコア: ${score}`;
+        overlay.style.display = 'flex';
+    }
+}
+
 window.onload = init;
 </script>
 </body>
